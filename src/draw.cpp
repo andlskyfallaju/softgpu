@@ -43,7 +43,10 @@ Vec3f barycentric(Vec3f A, Vec3f B, Vec3f C, Vec3f P) {
     return Vec3f(-1,1,1); 
 }
 
-void triangle(Vec3f t0, Vec3f t1, Vec3f t2, float ity0, float ity1, float ity2, float *zbuffer, Image &image, const Color& color) {
+void triangle(Vec3f t0, Vec3f t1, Vec3f t2,
+              Vec2f uv0, Vec2f uv1, Vec2f uv2,
+              float ity0, float ity1, float ity2,
+              float *zbuffer, Image &image, Texture &tex) {
     Vec2i bboxmin(image.get_width()-1,  image.get_height()-1);
     Vec2i bboxmax(0, 0);
     Vec2i clamp(image.get_width()-1, image.get_height()-1);
@@ -58,19 +61,32 @@ void triangle(Vec3f t0, Vec3f t1, Vec3f t2, float ity0, float ity1, float ity2, 
     Vec3f P;
     for (P.x=bboxmin.x; P.x<=bboxmax.x; P.x++) {
         for (P.y=bboxmin.y; P.y<=bboxmax.y; P.y++) {
-            Vec3f bc_screen  = barycentric(t0, t1, t2, P);
-            if (bc_screen.x<0 || bc_screen.y<0 || bc_screen.z<0) continue;
-            P.z = 0;
-            P.z += t0.z * bc_screen.x;
-            P.z += t1.z * bc_screen.y;
-            P.z += t2.z * bc_screen.z;
+            Vec3f bc = barycentric(t0, t1, t2, P);
+            if (bc.x<0 || bc.y<0 || bc.z<0) continue;
+
+            // Interpolate Z
+            P.z = t0.z*bc.x + t1.z*bc.y + t2.z*bc.z;
             int idx = int(P.x) + int(P.y)*image.get_width();
             if (zbuffer[idx] < P.z) {
                 zbuffer[idx] = P.z;
-                float ity = ity0 * bc_screen.x + ity1 * bc_screen.y + ity2 * bc_screen.z;
+
+                // Interpolate intensity (Gouraud)
+                float ity = ity0*bc.x + ity1*bc.y + ity2*bc.z;
                 if (ity > 1.f) ity = 1.f;
                 if (ity < 0.f) ity = 0.f;
-                Color c = {(uint8_t)(color.r * ity), (uint8_t)(color.g * ity), (uint8_t)(color.b * ity), 255};
+
+                // Interpolate UV and sample texture
+                float u = uv0.x*bc.x + uv1.x*bc.y + uv2.x*bc.z;
+                float v = uv0.y*bc.x + uv1.y*bc.y + uv2.y*bc.z;
+                Color texColor = tex.sample(u, v);
+
+                // Apply lighting to texture color
+                Color c = {
+                    (uint8_t)(texColor.r * ity),
+                    (uint8_t)(texColor.g * ity),
+                    (uint8_t)(texColor.b * ity),
+                    255
+                };
                 image.set(P.x, P.y, c);
             }
         }

@@ -43,61 +43,75 @@ Matrix projection(float camera_z) {
 }
 
 int main(int argc, char** argv) {
-    if (argc == 2) {
-        std::cout << "Loading model " << argv[1] << "..." << std::endl;
-        Model *model = new Model(argv[1]);
-        Image image(width, height);
-        
-        float *zbuffer = new float[width*height];
-        for (int i=0; i<width*height; i++) {
-            zbuffer[i] = -std::numeric_limits<float>::max();
-        }
-        
-        Vec3f light_dir(0,0,-1);
-        Vec3f camera(0,0,3);
-        
-        Matrix ModelView  = lookat(camera, Vec3f(0,0,0), Vec3f(0,1,0));
-        Matrix Projection = projection(camera.z);
-        Matrix ViewPort   = viewport(width/8, height/8, width*3/4, height*3/4);
-        
-        std::cout << "Rendering " << model->nfaces() << " triangles..." << std::endl;
-        for (int i=0; i<model->nfaces(); i++) {
-            std::vector<Vec3i> face = model->face_data(i);
-            Vec3f screen_coords[3];
-            Vec3f world_coords[3];
-            float intensity[3];
-            
-            for (int j=0; j<3; j++) {
-                Vec3f v = model->vert(face[j].raw[0]);
-                screen_coords[j] = m2vec(ViewPort * Projection * ModelView * vec2m(v));
-                world_coords[j]  = v;
-                
-                // Calculate intensity per vertex using vertex normals from OBJ
-                Vec3f n = model->norm(face[j].raw[2]);
-                n.normalize();
-                intensity[j] = std::max(0.f, n * light_dir);
-            }
-            
-            // Only draw if at least one vertex is facing the light
-            if (intensity[0]>0 || intensity[1]>0 || intensity[2]>0) {
-                Color base_color = {255, 255, 255, 255}; // Base color is white
-                triangle(screen_coords[0], screen_coords[1], screen_coords[2], 
-                         intensity[0], intensity[1], intensity[2], 
-                         zbuffer, image, base_color);
-            }
-        }
-
-        if (image.write_png("output.png")) {
-            std::cout << "Successfully saved output.png" << std::endl;
-        } else {
-            std::cout << "Failed to save output.png" << std::endl;
-        }
-        
-        delete[] zbuffer;
-        delete model;
-    } else {
-        std::cerr << "Usage: softgpu <obj_file>" << std::endl;
+    if (argc < 2) {
+        std::cerr << "Usage: softgpu <obj_file> [diffuse_texture]" << std::endl;
         return 1;
     }
+
+    std::cout << "Loading model " << argv[1] << "..." << std::endl;
+    Model *model = new Model(argv[1]);
+    Image image(width, height);
+
+    // Load the diffuse texture
+    Texture diffuse;
+    if (argc >= 3) {
+        if (diffuse.load(argv[2])) {
+            std::cout << "Loaded texture " << argv[2] << " (" << diffuse.get_width() << "x" << diffuse.get_height() << ")" << std::endl;
+        } else {
+            std::cerr << "WARNING: Failed to load texture " << argv[2] << std::endl;
+        }
+    }
+
+    float *zbuffer = new float[width*height];
+    for (int i=0; i<width*height; i++) {
+        zbuffer[i] = -std::numeric_limits<float>::max();
+    }
+
+    Vec3f light_dir(0,0,1);
+    Vec3f camera(0,0,3);
+
+    Matrix ModelView  = lookat(camera, Vec3f(0,0,0), Vec3f(0,1,0));
+    Matrix Projection = projection(camera.z);
+    Matrix ViewPort   = viewport(width/8, height/8, width*3/4, height*3/4);
+
+    std::cout << "Rendering " << model->nfaces() << " triangles..." << std::endl;
+    for (int i=0; i<model->nfaces(); i++) {
+        std::vector<Vec3i> face = model->face_data(i);
+        Vec3f screen_coords[3];
+        Vec3f world_coords[3];
+        float intensity[3];
+        Vec2f uvs[3];
+
+        for (int j=0; j<3; j++) {
+            Vec3f v = model->vert(face[j].raw[0]);
+            screen_coords[j] = m2vec(ViewPort * Projection * ModelView * vec2m(v));
+            world_coords[j]  = v;
+
+            // Per-vertex lighting from vertex normals
+            Vec3f n = model->norm(face[j].raw[2]);
+            n.normalize();
+            intensity[j] = std::max(0.f, n * light_dir);
+
+            // Per-vertex UV coordinates from the model
+            uvs[j] = model->uv(face[j].raw[1]);
+        }
+
+        // Only draw if at least one vertex is facing the light
+        if (intensity[0]>0 || intensity[1]>0 || intensity[2]>0) {
+            triangle(screen_coords[0], screen_coords[1], screen_coords[2],
+                     uvs[0], uvs[1], uvs[2],
+                     intensity[0], intensity[1], intensity[2],
+                     zbuffer, image, diffuse);
+        }
+    }
+
+    if (image.write_png("output.png")) {
+        std::cout << "Successfully saved output.png" << std::endl;
+    } else {
+        std::cout << "Failed to save output.png" << std::endl;
+    }
+
+    delete[] zbuffer;
+    delete model;
     return 0;
 }
