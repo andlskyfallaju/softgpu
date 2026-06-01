@@ -14,6 +14,7 @@ add_executable(softgpu
     src/image.cpp
     src/draw.cpp
     src/model.cpp
+    src/geometry.cpp
 )
 
 # Later we will add target_include_directories and target_compile_features for AVX-512 here

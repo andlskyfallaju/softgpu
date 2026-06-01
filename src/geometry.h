@@ -33,3 +33,25 @@ typedef Vec2<float> Vec2f;
 typedef Vec2<int>   Vec2i;
 typedef Vec3<float> Vec3f;
 typedef Vec3<int>   Vec3i;
+
+#include <vector>
+#include <iostream>
+
+class Matrix {
+    std::vector<std::vector<float> > m;
+    int rows, cols;
+public:
+    Matrix(int r=4, int c=4);
+    int nrows();
+    int ncols();
+    static Matrix identity(int dimensions);
+    std::vector<float>& operator[](const int i);
+    const std::vector<float>& operator[](const int i) const;
+    Matrix operator*(const Matrix& a) const;
+    Matrix transpose() const;
+    Matrix inverse() const;
+    friend std::ostream& operator<<(std::ostream& s, Matrix& m);
+};
+
+Matrix vec2m(Vec3f v);
+Vec3f m2vec(Matrix m);

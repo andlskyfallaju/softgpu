@@ -4,37 +4,24 @@
 
 void line(int x0, int y0, int x1, int y1, Image& image, const Color& color) {
     bool steep = false;
-    
-    // If the line is steep, we transpose the image coordinates
     if (std::abs(x0 - x1) < std::abs(y0 - y1)) {
         std::swap(x0, y0);
         std::swap(x1, y1);
         steep = true;
     }
-    
-    // Make sure we draw from left to right
     if (x0 > x1) {
         std::swap(x0, x1);
         std::swap(y0, y1);
     }
-    
     int dx = x1 - x0;
     int dy = y1 - y0;
-    
-    // The error accumulator. We scale it up by 2*dx to avoid floating point math.
     int derror2 = std::abs(dy) * 2;
     int error2 = 0;
-    
     int y = y0;
     int y_step = (y1 > y0) ? 1 : -1;
-    
     for (int x = x0; x <= x1; x++) {
-        if (steep) {
-            image.set(y, x, color); // if transposed, de-transpose
-        } else {
-            image.set(x, y, color);
-        }
-        
+        if (steep) image.set(y, x, color);
+        else image.set(x, y, color);
         error2 += derror2;
         if (error2 > dx) {
             y += y_step;
@@ -56,7 +43,7 @@ Vec3f barycentric(Vec3f A, Vec3f B, Vec3f C, Vec3f P) {
     return Vec3f(-1,1,1); 
 }
 
-void triangle(Vec3f t0, Vec3f t1, Vec3f t2, float *zbuffer, Image &image, const Color& color) {
+void triangle(Vec3f t0, Vec3f t1, Vec3f t2, float ity0, float ity1, float ity2, float *zbuffer, Image &image, const Color& color) {
     Vec2i bboxmin(image.get_width()-1,  image.get_height()-1);
     Vec2i bboxmax(0, 0);
     Vec2i clamp(image.get_width()-1, image.get_height()-1);
@@ -80,7 +67,11 @@ void triangle(Vec3f t0, Vec3f t1, Vec3f t2, float *zbuffer, Image &image, const 
             int idx = int(P.x) + int(P.y)*image.get_width();
             if (zbuffer[idx] < P.z) {
                 zbuffer[idx] = P.z;
-                image.set(P.x, P.y, color);
+                float ity = ity0 * bc_screen.x + ity1 * bc_screen.y + ity2 * bc_screen.z;
+                if (ity > 1.f) ity = 1.f;
+                if (ity < 0.f) ity = 0.f;
+                Color c = {(uint8_t)(color.r * ity), (uint8_t)(color.g * ity), (uint8_t)(color.b * ity), 255};
+                image.set(P.x, P.y, c);
             }
         }
     }
